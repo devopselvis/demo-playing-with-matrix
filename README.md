@@ -123,10 +123,10 @@ An advanced example showing git-based change detection and file-based component 
 **Features:**
 - Git diff analysis to determine changed files (simulated)
 - File-to-component mapping logic
-- Support for 400+ components across 4 batches
+- Support for up to 1024 components across 4 batches (256 each)
 - Three different strategies:
   - `changed_files`: Test only components affected by changes
-  - `all_components`: Test all 400 components (2 batches)
+  - `all_components`: Test all 400 components (requires 2 batches)
   - `specific_batch`: Test a specific batch by number
 - Demonstrates real-world monorepo change detection patterns
 
@@ -248,6 +248,9 @@ jobs:
 4. **Use conditional execution** to skip empty batches
 5. **Cache dependencies** to speed up individual jobs
 6. **Monitor costs** when running hundreds of jobs
+7. **Extract common logic**: In production, consider extracting batch generation logic into a shared script or action to reduce duplication
+
+> **Note**: The workflows in this repository intentionally duplicate batch generation logic across files for demonstration and clarity. In a production environment, you should extract common patterns into reusable scripts or composite actions.
 
 ## Real-World Application
 

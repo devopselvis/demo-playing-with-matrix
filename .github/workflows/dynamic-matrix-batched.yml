@@ -53,16 +53,19 @@ jobs:
           else
             # All components - simulate 300 components (exceeds 256 limit)
             # We'll split into batches of 256
+            TOTAL_COMPONENTS=300
+            BATCH_SIZE=256
+            
             components1="["
-            for i in {1..256}; do
+            for i in $(seq 1 $BATCH_SIZE); do
               if [ $i -gt 1 ]; then components1+=","; fi
               components1+="\"component-$i\""
             done
             components1+="]"
             
             components2="["
-            for i in {257..300}; do
-              if [ $i -gt 257 ]; then components2+=","; fi
+            for i in $(seq $((BATCH_SIZE + 1)) $TOTAL_COMPONENTS); do
+              if [ $i -gt $((BATCH_SIZE + 1)) ]; then components2+=","; fi
               components2+="\"component-$i\""
             done
             components2+="]"
@@ -73,9 +76,9 @@ jobs:
             echo "has_batch2=true" >> $GITHUB_OUTPUT
             echo "has_batch3=false" >> $GITHUB_OUTPUT
             
-            echo "Generated 300 components split into batches"
-            echo "Batch 1: 256 components"
-            echo "Batch 2: 44 components"
+            echo "Generated $TOTAL_COMPONENTS components split into batches"
+            echo "Batch 1: $BATCH_SIZE components"
+            echo "Batch 2: $((TOTAL_COMPONENTS - BATCH_SIZE)) components"
             exit 0
           fi
           
