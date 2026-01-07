@@ -115,6 +115,35 @@ gh workflow run ios-monorepo-example.yml \
   -f trigger_type=manual_all_components
 ```
 
+#### `advanced-file-based-matrix.yml`
+An advanced example showing git-based change detection and file-based component mapping.
+
+**Features:**
+- Git diff analysis to determine changed files (simulated)
+- File-to-component mapping logic
+- Support for 400+ components across 4 batches
+- Three different strategies:
+  - `changed_files`: Test only components affected by changes
+  - `all_components`: Test all 400 components (2 batches)
+  - `specific_batch`: Test a specific batch by number
+- Demonstrates real-world monorepo change detection patterns
+
+**How to run:**
+```bash
+# Test only changed components (based on git diff)
+gh workflow run advanced-file-based-matrix.yml \
+  -f strategy=changed_files
+
+# Test all 400 components
+gh workflow run advanced-file-based-matrix.yml \
+  -f strategy=all_components
+
+# Test specific batch (e.g., batch 2 = components 257-512)
+gh workflow run advanced-file-based-matrix.yml \
+  -f strategy=specific_batch \
+  -f batch_number=2
+```
+
 ## Key Techniques Demonstrated
 
 ### 1. Using `fromJSON()` for Dynamic Matrices
