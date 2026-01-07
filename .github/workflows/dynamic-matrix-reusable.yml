@@ -1,0 +1,165 @@
+name: Dynamic Matrix with Reusable Workflows
+
+on:
+  workflow_dispatch:
+    inputs:
+      num_components:
+        description: 'Number of components to test (simulates all components scenario)'
+        required: true
+        type: number
+        default: 300
+
+permissions:
+  contents: read
+
+jobs:
+  # Generate the matrix configuration dynamically
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      batch1: ${{ steps.create-matrix.outputs.batch1 }}
+      batch2: ${{ steps.create-matrix.outputs.batch2 }}
+      batch3: ${{ steps.create-matrix.outputs.batch3 }}
+      has_batch1: ${{ steps.create-matrix.outputs.has_batch1 }}
+      has_batch2: ${{ steps.create-matrix.outputs.has_batch2 }}
+      has_batch3: ${{ steps.create-matrix.outputs.has_batch3 }}
+      total_count: ${{ steps.create-matrix.outputs.total_count }}
+    steps:
+      - name: Generate dynamic matrix based on component count
+        id: create-matrix
+        run: |
+          total=${{ inputs.num_components }}
+          echo "total_count=$total" >> $GITHUB_OUTPUT
+          
+          # Calculate batches (max 256 per batch)
+          if [ $total -le 256 ]; then
+            # Single batch
+            components="["
+            for i in $(seq 1 $total); do
+              if [ $i -gt 1 ]; then components+=","; fi
+              components+="\"component-$i\""
+            done
+            components+="]"
+            
+            echo "batch1=$components" >> $GITHUB_OUTPUT
+            echo "has_batch1=true" >> $GITHUB_OUTPUT
+            echo "has_batch2=false" >> $GITHUB_OUTPUT
+            echo "has_batch3=false" >> $GITHUB_OUTPUT
+          elif [ $total -le 512 ]; then
+            # Two batches
+            components1="["
+            for i in $(seq 1 256); do
+              if [ $i -gt 1 ]; then components1+=","; fi
+              components1+="\"component-$i\""
+            done
+            components1+="]"
+            
+            components2="["
+            for i in $(seq 257 $total); do
+              if [ $i -gt 257 ]; then components2+=","; fi
+              components2+="\"component-$i\""
+            done
+            components2+="]"
+            
+            echo "batch1=$components1" >> $GITHUB_OUTPUT
+            echo "batch2=$components2" >> $GITHUB_OUTPUT
+            echo "has_batch1=true" >> $GITHUB_OUTPUT
+            echo "has_batch2=true" >> $GITHUB_OUTPUT
+            echo "has_batch3=false" >> $GITHUB_OUTPUT
+          else
+            # Three batches
+            components1="["
+            for i in $(seq 1 256); do
+              if [ $i -gt 1 ]; then components1+=","; fi
+              components1+="\"component-$i\""
+            done
+            components1+="]"
+            
+            components2="["
+            for i in $(seq 257 512); do
+              if [ $i -gt 257 ]; then components2+=","; fi
+              components2+="\"component-$i\""
+            done
+            components2+="]"
+            
+            components3="["
+            for i in $(seq 513 $total); do
+              if [ $i -gt 513 ]; then components3+=","; fi
+              components3+="\"component-$i\""
+            done
+            components3+="]"
+            
+            echo "batch1=$components1" >> $GITHUB_OUTPUT
+            echo "batch2=$components2" >> $GITHUB_OUTPUT
+            echo "batch3=$components3" >> $GITHUB_OUTPUT
+            echo "has_batch1=true" >> $GITHUB_OUTPUT
+            echo "has_batch2=true" >> $GITHUB_OUTPUT
+            echo "has_batch3=true" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "Generated $total components across batches"
+
+  # Batch 1: Uses reusable workflow with matrix
+  call-reusable-batch-1:
+    needs: generate-matrix
+    if: needs.generate-matrix.outputs.has_batch1 == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix.outputs.batch1) }}
+    uses: ./.github/workflows/reusable-test.yml
+    with:
+      component: ${{ matrix.component }}
+      batch: '1'
+
+  # Batch 2: Uses reusable workflow with matrix
+  call-reusable-batch-2:
+    needs: generate-matrix
+    if: needs.generate-matrix.outputs.has_batch2 == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix.outputs.batch2) }}
+    uses: ./.github/workflows/reusable-test.yml
+    with:
+      component: ${{ matrix.component }}
+      batch: '2'
+
+  # Batch 3: Uses reusable workflow with matrix
+  call-reusable-batch-3:
+    needs: generate-matrix
+    if: needs.generate-matrix.outputs.has_batch3 == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix.outputs.batch3) }}
+    uses: ./.github/workflows/reusable-test.yml
+    with:
+      component: ${{ matrix.component }}
+      batch: '3'
+
+  # Summary job
+  summary:
+    needs: [generate-matrix, call-reusable-batch-1, call-reusable-batch-2, call-reusable-batch-3]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report summary
+        run: |
+          echo "========================================="
+          echo "Test Execution Summary"
+          echo "========================================="
+          echo "Total components: ${{ needs.generate-matrix.outputs.total_count }}"
+          echo "Batch 1 status: ${{ needs.call-reusable-batch-1.result }}"
+          echo "Batch 2 status: ${{ needs.call-reusable-batch-2.result }}"
+          echo "Batch 3 status: ${{ needs.call-reusable-batch-3.result }}"
+          echo "========================================="
+          
+          if [ "${{ needs.call-reusable-batch-1.result }}" = "failure" ] || \
+             [ "${{ needs.call-reusable-batch-2.result }}" = "failure" ] || \
+             [ "${{ needs.call-reusable-batch-3.result }}" = "failure" ]; then
+            echo "❌ Some tests failed"
+            exit 1
+          else
+            echo "✓ All tests passed successfully!"
+          fi
