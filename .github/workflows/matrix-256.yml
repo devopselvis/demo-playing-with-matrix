@@ -3,6 +3,9 @@ name: Matrix Demo - 256 Combinations
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   matrix-job:
     runs-on: ubuntu-latest
