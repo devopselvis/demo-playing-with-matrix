@@ -1,0 +1,263 @@
+name: iOS Monorepo Component Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      trigger_type:
+        description: 'What triggered this workflow?'
+        required: true
+        type: choice
+        options:
+          - modified_single_component
+          - modified_core_component
+          - manual_all_components
+        default: 'modified_single_component'
+      modified_component:
+        description: 'Component that was modified (for single component trigger)'
+        required: false
+        type: string
+        default: 'component-42'
+  push:
+    branches:
+      - main
+    paths:
+      - 'components/**'
+
+permissions:
+  contents: read
+
+jobs:
+  # Determine which components to test based on changes
+  determine-test-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      batch1: ${{ steps.scope.outputs.batch1 }}
+      batch2: ${{ steps.scope.outputs.batch2 }}
+      batch3: ${{ steps.scope.outputs.batch3 }}
+      has_batch1: ${{ steps.scope.outputs.has_batch1 }}
+      has_batch2: ${{ steps.scope.outputs.has_batch2 }}
+      has_batch3: ${{ steps.scope.outputs.has_batch3 }}
+      test_description: ${{ steps.scope.outputs.test_description }}
+    steps:
+      - name: Determine test scope
+        id: scope
+        run: |
+          # Core components that trigger all tests when modified
+          core_components=(
+            "component-1"    # Authentication
+            "component-5"    # Networking
+            "component-10"   # Data persistence
+            "component-15"   # UI framework
+          )
+          
+          trigger="${{ inputs.trigger_type }}"
+          modified="${{ inputs.modified_component }}"
+          
+          if [ "$trigger" = "modified_single_component" ]; then
+            # Check if the modified component is a core component
+            is_core=false
+            for core in "${core_components[@]}"; do
+              if [ "$modified" = "$core" ]; then
+                is_core=true
+                break
+              fi
+            done
+            
+            if [ "$is_core" = true ]; then
+              echo "test_description=Core component '$modified' was modified - testing ALL 300 components" >> $GITHUB_OUTPUT
+              trigger="modified_core_component"
+            else
+              echo "test_description=Only component '$modified' was modified - testing single component" >> $GITHUB_OUTPUT
+              components="[\"$modified\"]"
+              echo "batch1=$components" >> $GITHUB_OUTPUT
+              echo "has_batch1=true" >> $GITHUB_OUTPUT
+              echo "has_batch2=false" >> $GITHUB_OUTPUT
+              echo "has_batch3=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+          
+          if [ "$trigger" = "modified_core_component" ] || [ "$trigger" = "manual_all_components" ]; then
+            echo "test_description=Testing ALL 300 components (exceeds 256 limit)" >> $GITHUB_OUTPUT
+            
+            # Generate batch 1: components 1-256
+            batch1="["
+            for i in $(seq 1 256); do
+              if [ $i -gt 1 ]; then batch1+=","; fi
+              batch1+="\"component-$i\""
+            done
+            batch1+="]"
+            
+            # Generate batch 2: components 257-300
+            batch2="["
+            for i in $(seq 257 300); do
+              if [ $i -gt 257 ]; then batch2+=","; fi
+              batch2+="\"component-$i\""
+            done
+            batch2+="]"
+            
+            echo "batch1=$batch1" >> $GITHUB_OUTPUT
+            echo "batch2=$batch2" >> $GITHUB_OUTPUT
+            echo "has_batch1=true" >> $GITHUB_OUTPUT
+            echo "has_batch2=true" >> $GITHUB_OUTPUT
+            echo "has_batch3=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Run tests for batch 1 (up to 256 components)
+  test-components-batch-1:
+    needs: determine-test-scope
+    if: needs.determine-test-scope.outputs.has_batch1 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 50  # Limit concurrent jobs to avoid overwhelming runners
+      matrix:
+        component: ${{ fromJSON(needs.determine-test-scope.outputs.batch1) }}
+    steps:
+      - name: Setup test environment
+        run: |
+          echo "Setting up environment for ${{ matrix.component }}"
+          
+      - name: Run component tests
+        run: |
+          echo "========================================="
+          echo "Running iOS tests for: ${{ matrix.component }}"
+          echo "Batch: 1 of 2"
+          echo "========================================="
+          
+          # Simulate running XCTest
+          echo "▶ Building test bundle for ${{ matrix.component }}..."
+          sleep 1
+          echo "▶ Running unit tests..."
+          sleep 1
+          echo "▶ Running integration tests..."
+          sleep 1
+          
+          echo "✓ All tests passed for ${{ matrix.component }}"
+          echo "  - 25 unit tests passed"
+          echo "  - 10 integration tests passed"
+
+  # Run tests for batch 2 (components 257+)
+  test-components-batch-2:
+    needs: determine-test-scope
+    if: needs.determine-test-scope.outputs.has_batch2 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 50
+      matrix:
+        component: ${{ fromJSON(needs.determine-test-scope.outputs.batch2) }}
+    steps:
+      - name: Setup test environment
+        run: |
+          echo "Setting up environment for ${{ matrix.component }}"
+          
+      - name: Run component tests
+        run: |
+          echo "========================================="
+          echo "Running iOS tests for: ${{ matrix.component }}"
+          echo "Batch: 2 of 2"
+          echo "========================================="
+          
+          # Simulate running XCTest
+          echo "▶ Building test bundle for ${{ matrix.component }}..."
+          sleep 1
+          echo "▶ Running unit tests..."
+          sleep 1
+          echo "▶ Running integration tests..."
+          sleep 1
+          
+          echo "✓ All tests passed for ${{ matrix.component }}"
+          echo "  - 25 unit tests passed"
+          echo "  - 10 integration tests passed"
+
+  # Run tests for batch 3 (if needed for >512 components)
+  test-components-batch-3:
+    needs: determine-test-scope
+    if: needs.determine-test-scope.outputs.has_batch3 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 50
+      matrix:
+        component: ${{ fromJSON(needs.determine-test-scope.outputs.batch3) }}
+    steps:
+      - name: Setup test environment
+        run: |
+          echo "Setting up environment for ${{ matrix.component }}"
+          
+      - name: Run component tests
+        run: |
+          echo "========================================="
+          echo "Running iOS tests for: ${{ matrix.component }}"
+          echo "Batch: 3 of 3"
+          echo "========================================="
+          
+          # Simulate running XCTest
+          echo "▶ Building test bundle for ${{ matrix.component }}..."
+          sleep 1
+          echo "▶ Running unit tests..."
+          sleep 1
+          echo "▶ Running integration tests..."
+          sleep 1
+          
+          echo "✓ All tests passed for ${{ matrix.component }}"
+          echo "  - 25 unit tests passed"
+          echo "  - 10 integration tests passed"
+
+  # Report test results
+  report-results:
+    needs: [determine-test-scope, test-components-batch-1, test-components-batch-2, test-components-batch-3]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate test report
+        run: |
+          echo "========================================="
+          echo "iOS Component Test Results"
+          echo "========================================="
+          echo ""
+          echo "Test Scope: ${{ needs.determine-test-scope.outputs.test_description }}"
+          echo ""
+          echo "Batch Results:"
+          echo "  • Batch 1: ${{ needs.test-components-batch-1.result }}"
+          echo "  • Batch 2: ${{ needs.test-components-batch-2.result }}"
+          echo "  • Batch 3: ${{ needs.test-components-batch-3.result }}"
+          echo ""
+          echo "========================================="
+          
+          # Check for failures
+          batch1_result="${{ needs.test-components-batch-1.result }}"
+          batch2_result="${{ needs.test-components-batch-2.result }}"
+          batch3_result="${{ needs.test-components-batch-3.result }}"
+          
+          failed=false
+          if [ "$batch1_result" = "failure" ]; then
+            echo "❌ Batch 1 tests failed"
+            failed=true
+          fi
+          
+          if [ "$batch2_result" = "failure" ]; then
+            echo "❌ Batch 2 tests failed"
+            failed=true
+          fi
+          
+          if [ "$batch3_result" = "failure" ]; then
+            echo "❌ Batch 3 tests failed"
+            failed=true
+          fi
+          
+          if [ "$failed" = true ]; then
+            echo ""
+            echo "❌ TEST SUITE FAILED"
+            exit 1
+          else
+            echo ""
+            echo "✅ ALL TESTS PASSED"
+            echo ""
+            echo "This workflow successfully demonstrated:"
+            echo "  • Dynamic matrix generation with fromJSON"
+            echo "  • Batching strategy to exceed 256 job limit"
+            echo "  • Conditional testing based on component changes"
+            echo "  • Scalable approach for iOS monorepo testing"
+          fi

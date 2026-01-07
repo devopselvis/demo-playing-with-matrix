@@ -1,0 +1,31 @@
+name: Reusable Test Workflow
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: 'Component to test'
+        required: true
+        type: string
+      batch:
+        description: 'Batch number (for tracking purposes)'
+        required: false
+        type: string
+        default: '1'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate component test
+        run: |
+          echo "========================================="
+          echo "Testing component: ${{ inputs.component }}"
+          echo "Batch: ${{ inputs.batch }}"
+          echo "========================================="
+          echo "Running tests for component ${{ inputs.component }}..."
+          sleep 2
+          echo "✓ Tests passed for component ${{ inputs.component }}"

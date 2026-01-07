@@ -1,0 +1,279 @@
+name: Advanced - File-Based Matrix Generation
+
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: 'Matrix generation strategy'
+        required: true
+        type: choice
+        options:
+          - changed_files
+          - all_components
+          - specific_batch
+        default: 'changed_files'
+      batch_number:
+        description: 'Batch number (for specific_batch strategy, 1-based)'
+        required: false
+        type: number
+        default: 1
+
+permissions:
+  contents: read
+
+jobs:
+  # This job demonstrates how you could generate the matrix from a file
+  # or based on git diff in a real monorepo scenario
+  generate-matrix-from-files:
+    runs-on: ubuntu-latest
+    outputs:
+      batch1: ${{ steps.create-matrix.outputs.batch1 }}
+      batch2: ${{ steps.create-matrix.outputs.batch2 }}
+      batch3: ${{ steps.create-matrix.outputs.batch3 }}
+      batch4: ${{ steps.create-matrix.outputs.batch4 }}
+      has_batch1: ${{ steps.create-matrix.outputs.has_batch1 }}
+      has_batch2: ${{ steps.create-matrix.outputs.has_batch2 }}
+      has_batch3: ${{ steps.create-matrix.outputs.has_batch3 }}
+      has_batch4: ${{ steps.create-matrix.outputs.has_batch4 }}
+      total_components: ${{ steps.create-matrix.outputs.total_components }}
+      total_batches: ${{ steps.create-matrix.outputs.total_batches }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git diff
+      
+      - name: Generate matrix based on strategy
+        id: create-matrix
+        run: |
+          strategy="${{ inputs.strategy }}"
+          batch_size=256
+          
+          # Function to create batches from component list
+          create_batches() {
+            local components=("$@")
+            local total=${#components[@]}
+            local num_batches=$(( (total + batch_size - 1) / batch_size ))
+            
+            echo "total_components=$total" >> $GITHUB_OUTPUT
+            echo "total_batches=$num_batches" >> $GITHUB_OUTPUT
+            
+            for batch_idx in $(seq 1 $num_batches); do
+              start=$(( (batch_idx - 1) * batch_size ))
+              end=$(( start + batch_size - 1 ))
+              
+              if [ $end -ge $total ]; then
+                end=$(( total - 1 ))
+              fi
+              
+              batch_json="["
+              for i in $(seq $start $end); do
+                if [ $i -gt $start ]; then batch_json+=","; fi
+                batch_json+="\"${components[$i]}\""
+              done
+              batch_json+="]"
+              
+              echo "batch$batch_idx=$batch_json" >> $GITHUB_OUTPUT
+              echo "has_batch$batch_idx=true" >> $GITHUB_OUTPUT
+            done
+            
+            # Mark remaining batches as empty
+            for empty_idx in $(seq $(( num_batches + 1 )) 4); do
+              echo "has_batch$empty_idx=false" >> $GITHUB_OUTPUT
+            done
+          }
+          
+          if [ "$strategy" = "changed_files" ]; then
+            echo "Analyzing changed files to determine affected components..."
+            
+            # In a real scenario, you would:
+            # 1. Get changed files: git diff --name-only origin/main...HEAD
+            # 2. Map files to components
+            # 3. Determine dependency graph
+            # 4. Build list of components to test
+            
+            # Simulated: pretend we found 15 changed components
+            changed_components=(
+              "component-1"
+              "component-5"
+              "component-10"
+              "component-15"
+              "component-20"
+              "component-25"
+              "component-30"
+              "component-42"
+              "component-100"
+              "component-150"
+              "component-200"
+              "component-250"
+              "component-275"
+              "component-290"
+              "component-300"
+            )
+            
+            create_batches "${changed_components[@]}"
+            
+          elif [ "$strategy" = "all_components" ]; then
+            echo "Generating matrix for all 400 components (2 batches)..."
+            
+            # Generate all 400 components
+            all_components=()
+            for i in $(seq 1 400); do
+              all_components+=("component-$i")
+            done
+            
+            create_batches "${all_components[@]}"
+            
+          elif [ "$strategy" = "specific_batch" ]; then
+            echo "Generating specific batch ${{ inputs.batch_number }}..."
+            
+            # Generate only the requested batch
+            batch_num=${{ inputs.batch_number }}
+            start=$(( (batch_num - 1) * batch_size + 1 ))
+            end=$(( start + batch_size - 1 ))
+            
+            batch_json="["
+            first=true
+            for i in $(seq $start $end); do
+              if [ "$first" = true ]; then
+                first=false
+              else
+                batch_json+=","
+              fi
+              batch_json+="\"component-$i\""
+            done
+            batch_json+="]"
+            
+            echo "batch1=$batch_json" >> $GITHUB_OUTPUT
+            echo "has_batch1=true" >> $GITHUB_OUTPUT
+            echo "has_batch2=false" >> $GITHUB_OUTPUT
+            echo "has_batch3=false" >> $GITHUB_OUTPUT
+            echo "has_batch4=false" >> $GITHUB_OUTPUT
+            echo "total_components=$batch_size" >> $GITHUB_OUTPUT
+            echo "total_batches=1" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "Matrix generation complete!"
+
+  # Batch 1
+  test-batch-1:
+    needs: generate-matrix-from-files
+    if: needs.generate-matrix-from-files.outputs.has_batch1 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 50
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix-from-files.outputs.batch1) }}
+    steps:
+      - name: Run tests for component
+        run: |
+          echo "Testing: ${{ matrix.component }} (Batch 1)"
+          sleep 1
+          echo "✓ Tests passed"
+
+  # Batch 2
+  test-batch-2:
+    needs: generate-matrix-from-files
+    if: needs.generate-matrix-from-files.outputs.has_batch2 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 50
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix-from-files.outputs.batch2) }}
+    steps:
+      - name: Run tests for component
+        run: |
+          echo "Testing: ${{ matrix.component }} (Batch 2)"
+          sleep 1
+          echo "✓ Tests passed"
+
+  # Batch 3
+  test-batch-3:
+    needs: generate-matrix-from-files
+    if: needs.generate-matrix-from-files.outputs.has_batch3 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 50
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix-from-files.outputs.batch3) }}
+    steps:
+      - name: Run tests for component
+        run: |
+          echo "Testing: ${{ matrix.component }} (Batch 3)"
+          sleep 1
+          echo "✓ Tests passed"
+
+  # Batch 4
+  test-batch-4:
+    needs: generate-matrix-from-files
+    if: needs.generate-matrix-from-files.outputs.has_batch4 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 50
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix-from-files.outputs.batch4) }}
+    steps:
+      - name: Run tests for component
+        run: |
+          echo "Testing: ${{ matrix.component }} (Batch 4)"
+          sleep 1
+          echo "✓ Tests passed"
+
+  # Summary with detailed reporting
+  comprehensive-summary:
+    needs: 
+      - generate-matrix-from-files
+      - test-batch-1
+      - test-batch-2
+      - test-batch-3
+      - test-batch-4
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate comprehensive report
+        run: |
+          echo "========================================="
+          echo "        Test Execution Report           "
+          echo "========================================="
+          echo ""
+          echo "Strategy: ${{ inputs.strategy }}"
+          echo "Total Components: ${{ needs.generate-matrix-from-files.outputs.total_components }}"
+          echo "Total Batches: ${{ needs.generate-matrix-from-files.outputs.total_batches }}"
+          echo ""
+          echo "Batch Results:"
+          echo "  Batch 1: ${{ needs.test-batch-1.result }}"
+          echo "  Batch 2: ${{ needs.test-batch-2.result }}"
+          echo "  Batch 3: ${{ needs.test-batch-3.result }}"
+          echo "  Batch 4: ${{ needs.test-batch-4.result }}"
+          echo ""
+          echo "========================================="
+          
+          # Determine overall status
+          failed=false
+          for result in "${{ needs.test-batch-1.result }}" \
+                       "${{ needs.test-batch-2.result }}" \
+                       "${{ needs.test-batch-3.result }}" \
+                       "${{ needs.test-batch-4.result }}"; do
+            if [ "$result" = "failure" ]; then
+              failed=true
+              break
+            fi
+          done
+          
+          if [ "$failed" = true ]; then
+            echo "❌ TESTS FAILED"
+            exit 1
+          else
+            echo "✅ ALL TESTS PASSED"
+            echo ""
+            echo "This workflow demonstrated:"
+            echo "  • Git-based change detection (simulated)"
+            echo "  • File-based component mapping"
+            echo "  • Dynamic batch calculation"
+            echo "  • Support for 400+ components (exceeded 256 limit)"
+            echo "  • Conditional batch execution"
+          fi

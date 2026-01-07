@@ -1,0 +1,176 @@
+name: Dynamic Matrix with fromJSON - Batch Strategy
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_scope:
+        description: 'Test scope: single, all, or custom'
+        required: true
+        type: choice
+        options:
+          - single
+          - all
+          - custom
+        default: 'single'
+      component_filter:
+        description: 'Component filter (comma-separated, for custom scope)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  # Generate the matrix configuration dynamically
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      batch1: ${{ steps.create-matrix.outputs.batch1 }}
+      batch2: ${{ steps.create-matrix.outputs.batch2 }}
+      batch3: ${{ steps.create-matrix.outputs.batch3 }}
+      has_batch1: ${{ steps.create-matrix.outputs.has_batch1 }}
+      has_batch2: ${{ steps.create-matrix.outputs.has_batch2 }}
+      has_batch3: ${{ steps.create-matrix.outputs.has_batch3 }}
+    steps:
+      - name: Generate dynamic matrix
+        id: create-matrix
+        run: |
+          # Simulate generating component list based on test scope
+          if [ "${{ inputs.test_scope }}" = "single" ]; then
+            # Single component test (e.g., the one that was modified)
+            components='["component-1"]'
+          elif [ "${{ inputs.test_scope }}" = "custom" ]; then
+            # Custom component list from input
+            IFS=',' read -ra COMPONENTS <<< "${{ inputs.component_filter }}"
+            components="["
+            for i in "${!COMPONENTS[@]}"; do
+              comp=$(echo "${COMPONENTS[$i]}" | xargs)
+              if [ $i -gt 0 ]; then components+=","; fi
+              components+="\"$comp\""
+            done
+            components+="]"
+          else
+            # All components - simulate 300 components (exceeds 256 limit)
+            # We'll split into batches of 256
+            TOTAL_COMPONENTS=300
+            BATCH_SIZE=256
+            
+            components1="["
+            for i in $(seq 1 $BATCH_SIZE); do
+              if [ $i -gt 1 ]; then components1+=","; fi
+              components1+="\"component-$i\""
+            done
+            components1+="]"
+            
+            components2="["
+            for i in $(seq $((BATCH_SIZE + 1)) $TOTAL_COMPONENTS); do
+              if [ $i -gt $((BATCH_SIZE + 1)) ]; then components2+=","; fi
+              components2+="\"component-$i\""
+            done
+            components2+="]"
+            
+            echo "batch1=$components1" >> $GITHUB_OUTPUT
+            echo "batch2=$components2" >> $GITHUB_OUTPUT
+            echo "has_batch1=true" >> $GITHUB_OUTPUT
+            echo "has_batch2=true" >> $GITHUB_OUTPUT
+            echo "has_batch3=false" >> $GITHUB_OUTPUT
+            
+            echo "Generated $TOTAL_COMPONENTS components split into batches"
+            echo "Batch 1: $BATCH_SIZE components"
+            echo "Batch 2: $((TOTAL_COMPONENTS - BATCH_SIZE)) components"
+            exit 0
+          fi
+          
+          # For single or custom scope
+          echo "batch1=$components" >> $GITHUB_OUTPUT
+          echo "has_batch1=true" >> $GITHUB_OUTPUT
+          echo "has_batch2=false" >> $GITHUB_OUTPUT
+          echo "has_batch3=false" >> $GITHUB_OUTPUT
+          echo "Generated components: $components"
+
+  # Batch 1: First 256 jobs
+  test-batch-1:
+    needs: generate-matrix
+    if: needs.generate-matrix.outputs.has_batch1 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix.outputs.batch1) }}
+    steps:
+      - name: Test component
+        run: |
+          echo "========================================="
+          echo "Testing component: ${{ matrix.component }}"
+          echo "Batch: 1"
+          echo "========================================="
+          echo "Running tests for component ${{ matrix.component }}..."
+          sleep 1
+          echo "✓ Tests passed for component ${{ matrix.component }}"
+
+  # Batch 2: Jobs 257-512 (if needed)
+  test-batch-2:
+    needs: generate-matrix
+    if: needs.generate-matrix.outputs.has_batch2 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix.outputs.batch2) }}
+    steps:
+      - name: Test component
+        run: |
+          echo "========================================="
+          echo "Testing component: ${{ matrix.component }}"
+          echo "Batch: 2"
+          echo "========================================="
+          echo "Running tests for component ${{ matrix.component }}..."
+          sleep 1
+          echo "✓ Tests passed for component ${{ matrix.component }}"
+
+  # Batch 3: Jobs 513-768 (if needed)
+  test-batch-3:
+    needs: generate-matrix
+    if: needs.generate-matrix.outputs.has_batch3 == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.generate-matrix.outputs.batch3) }}
+    steps:
+      - name: Test component
+        run: |
+          echo "========================================="
+          echo "Testing component: ${{ matrix.component }}"
+          echo "Batch: 3"
+          echo "========================================="
+          echo "Running tests for component ${{ matrix.component }}..."
+          sleep 1
+          echo "✓ Tests passed for component ${{ matrix.component }}"
+
+  # Summary job to report results
+  summary:
+    needs: [generate-matrix, test-batch-1, test-batch-2, test-batch-3]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report summary
+        run: |
+          echo "========================================="
+          echo "Test Execution Summary"
+          echo "========================================="
+          echo "Test scope: ${{ inputs.test_scope }}"
+          echo "Batch 1 status: ${{ needs.test-batch-1.result }}"
+          echo "Batch 2 status: ${{ needs.test-batch-2.result }}"
+          echo "Batch 3 status: ${{ needs.test-batch-3.result }}"
+          echo "========================================="
+          
+          if [ "${{ needs.test-batch-1.result }}" = "failure" ] || \
+             [ "${{ needs.test-batch-2.result }}" = "failure" ] || \
+             [ "${{ needs.test-batch-3.result }}" = "failure" ]; then
+            echo "❌ Some tests failed"
+            exit 1
+          else
+            echo "✓ All tests passed"
+          fi
