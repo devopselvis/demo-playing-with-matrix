@@ -3,6 +3,8 @@
 This repository demonstrates how to work around GitHub Actions' 256 matrix job limit using `fromJSON` and batching strategies, with practical examples for iOS monorepo testing scenarios.
 
 > 📚 **New to this pattern?** Check out the [Quick Reference Guide](QUICK_REFERENCE.md) for a condensed overview with code examples.
+> 
+> 🏗️ **Want to understand the architecture?** See the [Architecture Documentation](ARCHITECTURE.md) for detailed diagrams and data flow.
 
 ## The Problem
 
@@ -267,6 +269,7 @@ This approach provides the flexibility to run targeted tests for efficiency whil
 
 ## Additional Resources
 
+- 🏗️ [Architecture Documentation](ARCHITECTURE.md) - Detailed diagrams and data flow
 - 📚 [Quick Reference Guide](QUICK_REFERENCE.md) - Condensed patterns and code examples
 - 🔗 [GitHub Actions: fromJSON](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#fromjson)
 - 🔗 [GitHub Actions: Matrix Strategy](https://docs.github.com/en/actions/using-jobs/using-a-matrix-for-your-jobs)
